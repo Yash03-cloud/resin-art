@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from '@/lib/compat-router';
 import { motion } from 'framer-motion';
 import {
   SparklesIcon,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from '@/lib/compat-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingCartIcon,

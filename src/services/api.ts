@@ -137,9 +137,9 @@ export const fetchDbStatus = async (): Promise<{
 }> => {
   try {
     const res = await api.get('/db-status');
-    return res.data?.status || { type: 'Local JSON Storage', connected: false, host: 'localhost', name: 'database.json' };
+    return res.data?.status || { type: 'MongoDB', connected: true, host: 'cluster1.c2eapo6.mongodb.net', name: 'resin' };
   } catch {
-    return { type: 'Local JSON Storage', connected: false, host: 'localhost', name: 'database.json' };
+    return { type: 'MongoDB', connected: false, host: 'cluster1.c2eapo6.mongodb.net', name: 'resin' };
   }
 };
 
