@@ -1,2 +1,1 @@
-# resin-art
-demo-website-for-resin-art
+artvibe by charu demo website
