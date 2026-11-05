@@ -7,10 +7,21 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const email = searchParams.get('email');
+    const trash = searchParams.get('trash') === 'true';
 
     await connectDB();
 
-    const query = email ? { email: new RegExp(`^${email}$`, 'i') } : {};
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const query: any = email ? { email: new RegExp(`^${email}$`, 'i') } : {};
+
+    if (trash) {
+      // Only fetch orders deleted within the 2-day window
+      query.isDeleted = true;
+      query.deletedAt = { $gte: twoDaysAgo };
+    } else {
+      query.isDeleted = { $ne: true };
+    }
+
     const orders = await OrderModel.find(query).sort({ createdAt: -1 }).lean();
 
     return NextResponse.json({ success: true, count: orders.length, orders });

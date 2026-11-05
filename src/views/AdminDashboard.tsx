@@ -23,6 +23,8 @@ import {
   ChatBubbleLeftRightIcon,
   ChartBarIcon,
   EnvelopeIcon,
+  ArrowUturnLeftIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from '@/lib/compat-router';
@@ -31,6 +33,8 @@ import { analyticsData } from '../data/mockData';
 import {
   fetchOrders,
   updateOrderStatus,
+  deleteOrder,
+  restoreOrder,
   fetchProducts,
   createProduct,
   updateProduct,
@@ -109,6 +113,8 @@ export default function AdminDashboard() {
     host: 'localhost',
   });
   const [ordersList, setOrdersList] = useState<any[]>([]);
+  const [deletedOrdersList, setDeletedOrdersList] = useState<any[]>([]);
+  const [orderViewMode, setOrderViewMode] = useState<'active' | 'trash'>('active');
   const [customOrdersList, setCustomOrdersList] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [contactMessagesList, setContactMessagesList] = useState<ContactMessage[]>([]);
@@ -245,16 +251,18 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statusRes, prodsRes, ordersRes, customRes, messagesRes] = await Promise.all([
+      const [statusRes, prodsRes, ordersRes, deletedOrdersRes, customRes, messagesRes] = await Promise.all([
         fetchDbStatus(),
         fetchProducts(),
         fetchOrders(),
+        fetchOrders({ trash: true }),
         fetchCustomOrders(),
         fetchContactMessages(),
       ]);
       if (statusRes) setDbStatus(statusRes);
       if (Array.isArray(prodsRes)) setProductsList(prodsRes);
       if (Array.isArray(ordersRes)) setOrdersList(ordersRes);
+      if (Array.isArray(deletedOrdersRes)) setDeletedOrdersList(deletedOrdersRes);
       if (Array.isArray(customRes)) setCustomOrdersList(customRes);
       if (Array.isArray(messagesRes)) setContactMessagesList(messagesRes);
     } catch (err) {
@@ -426,6 +434,57 @@ export default function AdminDashboard() {
     } catch {
       toast.error('Could not update order status');
     }
+  };
+
+  const handleDeleteOrder = async (orderId: string, permanent: boolean = false) => {
+    if (permanent) {
+      if (!window.confirm(`Are you sure you want to PERMANENTLY delete order #${orderId}? This cannot be undone.`)) {
+        return;
+      }
+    } else {
+      if (!window.confirm(`Move order #${orderId} to the Recovery Bin? You will have 2 days (48 hours) to restore it if deleted by accident.`)) {
+        return;
+      }
+    }
+
+    try {
+      const res = await deleteOrder(orderId, permanent);
+      toast.success(res?.message || (permanent ? 'Order permanently deleted' : 'Order moved to Recovery Bin (2 days recovery)'));
+      await loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Could not delete order';
+      toast.error(msg);
+    }
+  };
+
+  const handleRestoreOrder = async (orderId: string) => {
+    try {
+      const res = await restoreOrder(orderId);
+      toast.success(res?.message || `Order #${orderId} restored successfully! 🎉`);
+      await loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Could not restore order';
+      toast.error(msg);
+    }
+  };
+
+  const getRemainingRecoveryTime = (deletedAt?: string) => {
+    if (!deletedAt) return '2 days left';
+    const deletedTime = new Date(deletedAt).getTime();
+    const expiresAt = deletedTime + 2 * 24 * 60 * 60 * 1000;
+    const diffMs = expiresAt - Date.now();
+    if (diffMs <= 0) return 'Expired (Over 2 days)';
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (days > 0) {
+      return `${days}d ${hours}h left`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${minutes}m left`;
+    }
+    return `${Math.max(1, minutes)}m left`;
   };
 
   const numPrice = Number(price) || 0;
@@ -1588,179 +1647,339 @@ export default function AdminDashboard() {
         )}
 
         {/* ======================================================== */}
-        {/* TAB 3: CUSTOMER ORDERS & WHATSAPP                        */}
+        {/* TAB 3: CUSTOMER ORDERS & RECOVERY                        */}
         {/* ======================================================== */}
         {activeTab === 'orders' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="font-playfair text-2xl font-bold text-gray-900 dark:text-white">Customer Orders</h2>
-                <p className="text-xs sm:text-sm text-gray-500">Manage order statuses and communicate directly via WhatsApp</p>
+                <p className="text-xs sm:text-sm text-gray-500">Manage orders, update status, message on WhatsApp, or recover deleted orders</p>
+              </div>
+
+              {/* Subtabs for Active vs Recovery Bin */}
+              <div className="inline-flex p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl border border-gray-200/70 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setOrderViewMode('active')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    orderViewMode === 'active'
+                      ? 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ShoppingBagIcon className="w-4 h-4" />
+                  <span>Active Orders ({ordersList.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderViewMode('trash')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    orderViewMode === 'trash'
+                      ? 'bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-400 shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ClockIcon className="w-4 h-4" />
+                  <span>Recovery Bin</span>
+                  {deletedOrdersList.length > 0 && (
+                    <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 font-bold">
+                      {deletedOrdersList.length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
-            {ordersList.length === 0 ? (
-              <div className="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div className="w-16 h-16 mx-auto mb-4 bg-purple-50 dark:bg-purple-950/40 rounded-2xl flex items-center justify-center text-purple-600 text-2xl">
-                  📦
+            {orderViewMode === 'active' ? (
+              ordersList.length === 0 ? (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-purple-50 dark:bg-purple-950/40 rounded-2xl flex items-center justify-center text-purple-600 text-2xl">
+                    📦
+                  </div>
+                  <h3 className="font-playfair text-xl font-bold text-gray-900 dark:text-white mb-2">
+                    No Customer Orders Yet
+                  </h3>
+                  <p className="text-gray-500 text-xs sm:text-sm max-w-md mx-auto mb-6">
+                    All demo orders have been removed. When real customers order products via Cash on Delivery, they will appear here with WhatsApp messaging, status controls, and 2-day recovery options.
+                  </p>
+                  <Link to="/shop" className="btn-secondary text-xs py-2 px-5 inline-flex items-center gap-1.5">
+                    <span>View Live Shop ↗</span>
+                  </Link>
                 </div>
-                <h3 className="font-playfair text-xl font-bold text-gray-900 dark:text-white mb-2">
-                  No Customer Orders Yet
-                </h3>
-                <p className="text-gray-500 text-xs sm:text-sm max-w-md mx-auto mb-6">
-                  All demo orders have been removed. When real customers order products via Cash on Delivery, they will appear here with WhatsApp messaging and live status controls.
-                </p>
-                <Link to="/shop" className="btn-secondary text-xs py-2 px-5 inline-flex items-center gap-1.5">
-                  <span>View Live Shop ↗</span>
-                </Link>
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[850px]">
-                    <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
-                      <tr>
-                        {['Order ID', 'Customer & Contact', 'Items', 'Photo Frame Upload', 'Amount', 'Status', 'Update Status', 'WhatsApp'].map((h) => (
-                          <th
-                            key={h}
-                            className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {ordersList.map((order) => {
-                        const cleanPhone = (order.phone || WHATSAPP_NUMBER).replace(/\D/g, '');
-                        const waLink = `https://wa.me/91${cleanPhone.slice(-10)}?text=Hello ${encodeURIComponent(
-                          order.customer
-                        )}, this is Artvibe by Charu regarding your order ${order.id}. Current status is: ${order.status}.`;
+              ) : (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[950px]">
+                      <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                        <tr>
+                          {['Order ID', 'Customer & Contact', 'Items', 'Photo Frame Upload', 'Amount', 'Status', 'Update Status', 'WhatsApp', 'Actions'].map((h) => (
+                            <th
+                              key={h}
+                              className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {ordersList.map((order) => {
+                          const cleanPhone = (order.phone || WHATSAPP_NUMBER).replace(/\D/g, '');
+                          const waLink = `https://wa.me/91${cleanPhone.slice(-10)}?text=Hello ${encodeURIComponent(
+                            order.customer
+                          )}, this is Artvibe by Charu regarding your order ${order.id}. Current status is: ${order.status}.`;
 
-                        const customPhotos = [
-                          ...(order.customImage ? [{ image: order.customImage, note: order.customNote, title: order.product || 'Photo Frame' }] : []),
-                          ...((order.items || []).filter((it: any) => it.customImage).map((it: any) => ({
-                            image: it.customImage,
-                            note: it.customNote,
-                            title: it.title || 'Photo Frame'
-                          })) || [])
-                        ].filter((v, idx, arr) => arr.findIndex((t) => t.image === v.image) === idx);
+                          const customPhotos = [
+                            ...(order.customImage ? [{ image: order.customImage, note: order.customNote, title: order.product || 'Photo Frame' }] : []),
+                            ...((order.items || []).filter((it: any) => it.customImage).map((it: any) => ({
+                              image: it.customImage,
+                              note: it.customNote,
+                              title: it.title || 'Photo Frame'
+                            })) || [])
+                          ].filter((v, idx, arr) => arr.findIndex((t) => t.image === v.image) === idx);
 
-                        return (
-                          <tr key={order.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
-                            <td className="px-4 py-3.5">
-                              <span className="font-bold text-sm text-purple-700 dark:text-purple-400 font-mono">
-                                {order.id}
-                              </span>
-                              <div className="text-[11px] text-gray-400">{order.date}</div>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <div className="font-semibold text-sm text-gray-800 dark:text-white">{order.customer}</div>
-                              <div className="text-xs text-gray-500">{order.phone || `+91 ${WHATSAPP_NUMBER}`}</div>
-                              <div className="text-[11px] text-gray-400">{order.email}</div>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <p className="text-xs text-gray-700 dark:text-gray-300 font-medium max-w-[200px] truncate">
-                                {order.product || (order.items && order.items[0]?.title) || 'Resin Art Piece'}
-                              </p>
-                              <span className="text-[11px] text-gray-400">{order.items?.length || 1} item(s)</span>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              {customPhotos.length > 0 ? (
-                                <div className="flex flex-col gap-2">
-                                  {customPhotos.map((photo, pIdx) => (
-                                    <div
-                                      key={pIdx}
-                                      className="flex items-center gap-2 p-1.5 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800"
-                                    >
-                                      <img
-                                        src={photo.image}
-                                        alt="Customer Frame Photo"
-                                        onClick={() =>
-                                          setPreviewModalPhoto({
-                                            url: photo.image,
-                                            title: photo.title,
-                                            note: photo.note,
-                                            orderId: order.id,
-                                            customer: order.customer,
-                                          })
-                                        }
-                                        className="w-11 h-11 object-cover rounded-lg border border-purple-300 dark:border-purple-700 cursor-pointer hover:scale-105 transition-transform shadow-xs shrink-0"
-                                        title="Click to view full photo"
-                                      />
-                                      <div className="min-w-0 flex flex-col gap-1">
-                                        <button
-                                          type="button"
+                          return (
+                            <tr key={order.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                              <td className="px-4 py-3.5">
+                                <span className="font-bold text-sm text-purple-700 dark:text-purple-400 font-mono">
+                                  {order.id}
+                                </span>
+                                <div className="text-[11px] text-gray-400">{order.date}</div>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <div className="font-semibold text-sm text-gray-800 dark:text-white">{order.customer}</div>
+                                <div className="text-xs text-gray-500">{order.phone || `+91 ${WHATSAPP_NUMBER}`}</div>
+                                <div className="text-[11px] text-gray-400">{order.email}</div>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <p className="text-xs text-gray-700 dark:text-gray-300 font-medium max-w-[200px] truncate">
+                                  {order.product || (order.items && order.items[0]?.title) || 'Resin Art Piece'}
+                                </p>
+                                <span className="text-[11px] text-gray-400">{order.items?.length || 1} item(s)</span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                {customPhotos.length > 0 ? (
+                                  <div className="flex flex-col gap-2">
+                                    {customPhotos.map((photo, pIdx) => (
+                                      <div
+                                        key={pIdx}
+                                        className="flex items-center gap-2 p-1.5 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800"
+                                      >
+                                        <img
+                                          src={photo.image}
+                                          alt="Customer Frame Photo"
                                           onClick={() =>
-                                            handleDownloadImage(
-                                              photo.image,
-                                              `${order.customer}-photo-frame-${order.id}`
-                                            )
+                                            setPreviewModalPhoto({
+                                              url: photo.image,
+                                              title: photo.title,
+                                              note: photo.note,
+                                              orderId: order.id,
+                                              customer: order.customer,
+                                            })
                                           }
-                                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-purple-700 bg-white hover:bg-purple-100 dark:bg-gray-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-lg shadow-xs transition-colors shrink-0 whitespace-nowrap"
-                                          title="Download customer photo for printing/framing"
-                                        >
-                                          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                                          <span>Download</span>
-                                        </button>
-                                        {photo.note && (
-                                          <span
-                                            className="text-[10px] text-gray-500 dark:text-gray-400 italic max-w-[130px] truncate"
-                                            title={photo.note}
+                                          className="w-11 h-11 object-cover rounded-lg border border-purple-300 dark:border-purple-700 cursor-pointer hover:scale-105 transition-transform shadow-xs shrink-0"
+                                          title="Click to view full photo"
+                                        />
+                                        <div className="min-w-0 flex flex-col gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleDownloadImage(
+                                                photo.image,
+                                                `${order.customer}-photo-frame-${order.id}`
+                                              )
+                                            }
+                                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-purple-700 bg-white hover:bg-purple-100 dark:bg-gray-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-lg shadow-xs transition-colors shrink-0 whitespace-nowrap"
+                                            title="Download customer photo for printing/framing"
                                           >
-                                            "{photo.note}"
-                                          </span>
-                                        )}
+                                            <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                                            <span>Download</span>
+                                          </button>
+                                          {photo.note && (
+                                            <span
+                                              className="text-[10px] text-gray-500 dark:text-gray-400 italic max-w-[130px] truncate"
+                                              title={photo.note}
+                                            >
+                                              "{photo.note}"
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white">
+                                ₹{Number(order.amount).toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className={`badge text-xs ${statusColor[order.status] || 'badge-primary'}`}>
+                                  {order.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <select
+                                  value={order.status}
+                                  onChange={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleStatusChange(order.id, e.target.value);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:border-purple-500 cursor-pointer"
+                                >
+                                  {ORDER_STATUSES.map((s) => (
+                                    <option key={s} value={s}>
+                                      {s}
+                                    </option>
                                   ))}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-gray-400 italic">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white">
-                              ₹{Number(order.amount).toLocaleString('en-IN')}
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <span className={`badge text-xs ${statusColor[order.status] || 'badge-primary'}`}>
-                                {order.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <select
-                                value={order.status}
-                                onChange={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  handleStatusChange(order.id, e.target.value);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:border-purple-500 cursor-pointer"
-                              >
-                                {ORDER_STATUSES.map((s) => (
-                                  <option key={s} value={s}>
-                                    {s}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <a
-                                href={waLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 text-xs font-semibold border border-green-200 transition-colors"
-                              >
-                                <span>💬 WhatsApp</span>
-                              </a>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                </select>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <a
+                                  href={waLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 text-xs font-semibold border border-green-200 transition-colors"
+                                >
+                                  <span>💬 WhatsApp</span>
+                                </a>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOrder(order.id, false)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 transition-colors"
+                                  title="Delete order (2 days recovery window)"
+                                >
+                                  <TrashIcon className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+              )
+            ) : (
+              // Recovery Bin View (2-Day Recovery Window)
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 shrink-0">
+                    <ClockIcon className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs sm:text-sm text-amber-900 dark:text-amber-200">
+                    <p className="font-bold">2-Day Data Recovery Guarantee</p>
+                    <p className="mt-0.5 text-amber-700 dark:text-amber-300 text-xs">
+                      Accidentally deleted orders are safely preserved here for <strong>2 days (48 hours)</strong> from the time of deletion. You can restore an order back to active status at any point before expiration.
+                    </p>
+                  </div>
+                </div>
+
+                {deletedOrdersList.length === 0 ? (
+                  <div className="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-amber-50 dark:bg-amber-950/40 rounded-2xl flex items-center justify-center text-amber-600 text-2xl">
+                      🗑️
+                    </div>
+                    <h3 className="font-playfair text-xl font-bold text-gray-900 dark:text-white mb-2">
+                      Recovery Bin is Empty
+                    </h3>
+                    <p className="text-gray-500 text-xs sm:text-sm max-w-md mx-auto">
+                      No deleted orders found within the 2-day recovery window. If you delete an order from Active Orders, it will be kept here for 48 hours for recovery.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[900px]">
+                        <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                          <tr>
+                            {['Order ID', 'Customer & Contact', 'Items', 'Amount', 'Deleted At', 'Recovery Expires In', 'Actions'].map((h) => (
+                              <th
+                                key={h}
+                                className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {deletedOrdersList.map((order) => {
+                            const formattedDeletedAt = order.deletedAt
+                              ? new Date(order.deletedAt).toLocaleString('en-IN', {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                })
+                              : 'Recently';
+
+                            return (
+                              <tr key={order.id} className="hover:bg-amber-50/20 dark:hover:bg-gray-700/30 transition-colors">
+                                <td className="px-4 py-3.5">
+                                  <span className="font-bold text-sm text-purple-700 dark:text-purple-400 font-mono">
+                                    {order.id}
+                                  </span>
+                                  <div className="text-[11px] text-gray-400">{order.date}</div>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <div className="font-semibold text-sm text-gray-800 dark:text-white">{order.customer}</div>
+                                  <div className="text-xs text-gray-500">{order.phone || `+91 ${WHATSAPP_NUMBER}`}</div>
+                                  <div className="text-[11px] text-gray-400">{order.email}</div>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <p className="text-xs text-gray-700 dark:text-gray-300 font-medium max-w-[200px] truncate">
+                                    {order.product || (order.items && order.items[0]?.title) || 'Resin Art Piece'}
+                                  </p>
+                                  <span className="text-[11px] text-gray-400">{order.items?.length || 1} item(s)</span>
+                                </td>
+                                <td className="px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white">
+                                  ₹{Number(order.amount).toLocaleString('en-IN')}
+                                </td>
+                                <td className="px-4 py-3.5 text-xs text-gray-600 dark:text-gray-300">
+                                  {formattedDeletedAt}
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                                    <ClockIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                    <span>{getRemainingRecoveryTime(order.deletedAt)}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRestoreOrder(order.id)}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-xs"
+                                      title="Restore this order back to active customer orders"
+                                    >
+                                      <ArrowUturnLeftIcon className="w-3.5 h-3.5" />
+                                      <span>Restore</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteOrder(order.id, true)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 transition-colors"
+                                      title="Permanently remove order from database"
+                                    >
+                                      <TrashIcon className="w-3.5 h-3.5" />
+                                      <span>Delete Forever</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

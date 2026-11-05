@@ -35,6 +35,8 @@ const OrderSchema = new mongoose.Schema(
     estimatedDelivery: { type: String },
     trackingNumber: { type: String },
     timeline: [TimelineEventSchema],
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date },
   },
   { timestamps: true }
 );

@@ -203,6 +203,8 @@ export interface Order {
   estimatedDelivery: string;
   trackingNumber: string;
   timeline: OrderTimelineItem[];
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 export const createOrder = async (orderPayload: {
@@ -265,9 +267,12 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
   return null;
 };
 
-export const fetchOrders = async (email?: string): Promise<Order[]> => {
+export const fetchOrders = async (
+  params?: string | { email?: string; trash?: boolean }
+): Promise<Order[]> => {
   try {
-    const res = await api.get('/orders', { params: { email } });
+    const query = typeof params === 'string' ? { email: params } : params;
+    const res = await api.get('/orders', { params: query });
     if (res.data?.success && Array.isArray(res.data.orders)) {
       return res.data.orders;
     }
@@ -275,6 +280,21 @@ export const fetchOrders = async (email?: string): Promise<Order[]> => {
     // fallback
   }
   return [];
+};
+
+export const deleteOrder = async (
+  orderId: string,
+  permanent: boolean = false
+): Promise<{ success: boolean; message: string }> => {
+  const res = await api.delete(`/orders/${orderId}`, { params: { permanent } });
+  return res.data;
+};
+
+export const restoreOrder = async (
+  orderId: string
+): Promise<{ success: boolean; message: string; order?: Order }> => {
+  const res = await api.post(`/orders/${orderId}/restore`);
+  return res.data;
 };
 
 export const updateOrderStatus = async (orderId: string, status: string, note?: string): Promise<Order> => {
