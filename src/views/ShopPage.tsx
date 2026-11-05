@@ -11,7 +11,7 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import ProductCard from '../components/ProductCard';
-import { categories } from '../data/mockData';
+import { categories, products as fallbackProducts } from '../data/mockData';
 import { fetchProducts, type Product } from '../services/api';
 
 const sortOptions = [
@@ -32,8 +32,16 @@ export default function ShopPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [productsList, setProductsList] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Initialize with frontend fallback immediately so products show instantly
+  const [productsList, setProductsList] = useState<Product[]>(() => {
+    let initial = [...fallbackProducts] as unknown as Product[];
+    const cat = searchParams.get('category');
+    if (cat && cat !== 'All') {
+      initial = initial.filter((p) => p.category.toLowerCase() === cat.toLowerCase());
+    }
+    return initial;
+  });
+  const [loading, setLoading] = useState(false);
   const productsPerPage = 9;
 
   // Sync state if URL query params change

@@ -4,7 +4,7 @@ import { HeartIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 import { galleryItems } from '../data/mockData';
 
-const galleryCategories = ['All', 'Resin Art', 'Home Decor', 'Jewellery', 'Customized Orders'];
+const galleryCategories = ['All', 'Home Decor', 'Jewellery', 'Customized Orders'];
 
 export default function GalleryPage() {
   const [activeCategory, setActiveCategory] = useState('All');
@@ -82,6 +82,8 @@ export default function GalleryPage() {
                 <img
                   src={item.image}
                   alt={item.title}
+                  loading={i < 4 ? 'eager' : 'lazy'}
+                  decoding="async"
                   className="w-full object-cover transition-transform duration-500 group-hover:scale-110"
                   style={{ minHeight: i % 3 === 0 ? '280px' : '200px', maxHeight: '380px' }}
                 />

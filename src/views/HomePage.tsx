@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
 import ProductCard from '../components/ProductCard';
-import { categories, testimonials, galleryItems } from '../data/mockData';
+import { categories, testimonials, galleryItems, products as fallbackProducts } from '../data/mockData';
 import { fetchProducts, type Product } from '../services/api';
 import 'swiper/css';
 import 'swiper/css/navigation';
@@ -82,12 +82,14 @@ export default function HomePage() {
   const heroY = useTransform(scrollY, [0, 500], [0, 150]);
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0]);
 
-  const [homeProducts, setHomeProducts] = useState<Product[]>([]);
+  // Immediately initialize with frontend cache/fallback for instant page load
+  const [homeProducts, setHomeProducts] = useState<Product[]>(() => fallbackProducts as unknown as Product[]);
 
+  // Refresh in background from backend MongoDB
   useEffect(() => {
     let active = true;
     fetchProducts().then((res) => {
-      if (active && Array.isArray(res)) {
+      if (active && Array.isArray(res) && res.length > 0) {
         setHomeProducts(res);
       }
     });
