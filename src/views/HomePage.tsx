@@ -89,7 +89,7 @@ export default function HomePage() {
   useEffect(() => {
     let active = true;
     fetchProducts().then((res) => {
-      if (active && Array.isArray(res) && res.length > 0) {
+      if (active && Array.isArray(res)) {
         setHomeProducts(res);
       }
     });

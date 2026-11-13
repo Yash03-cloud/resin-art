@@ -8,7 +8,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 8000,
+  timeout: 15000,
 });
 
 // Attach auth token if available (reads from tab session or storage)
@@ -133,13 +133,22 @@ export const fetchDbStatus = async (): Promise<{
   connected: boolean;
   host: string;
   name: string;
-  uri?: string | null;
 }> => {
   try {
     const res = await api.get('/db-status');
-    return res.data?.status || { type: 'MongoDB', connected: true, host: 'cluster1.c2eapo6.mongodb.net', name: 'resin' };
+    return res.data?.status || {
+      type: 'MongoDB',
+      connected: false,
+      host: 'not connected',
+      name: 'not connected',
+    };
   } catch {
-    return { type: 'MongoDB', connected: false, host: 'cluster1.c2eapo6.mongodb.net', name: 'resin' };
+    return {
+      type: 'MongoDB',
+      connected: false,
+      host: 'not connected',
+      name: 'not connected',
+    };
   }
 };
 
@@ -417,4 +426,3 @@ export const fetchAdminStats = async () => {
   }
   return null;
 };
-

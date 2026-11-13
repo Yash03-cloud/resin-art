@@ -26,9 +26,11 @@ A full-stack e-commerce web application converted to **Next.js (App Router)** an
 
 When deploying to Vercel, configure these environment variables under **Project Settings → Environment Variables**:
 
+Set `MONGODB_URI` in every deployment environment (Development, Preview, and Production). Use the database name that contains your products and other app records, and allow the deployment to connect in your MongoDB Atlas network access settings. Do not commit credentials to source control.
+
 | Variable | Description | Example Value |
 | :--- | :--- | :--- |
-| `MONGODB_URI` | MongoDB Atlas Connection String | `mongodb+srv://resin-art:resin-art07@cluster1.c2eapo6.mongodb.net/test?retryWrites=true&w=majority` |
+| `MONGODB_URI` | MongoDB Atlas connection string for the database containing your app data | `mongodb+srv://<username>:<password>@<cluster-host>/<database>?retryWrites=true&w=majority` |
 | `WHATSAPP_NUMBER` | Support / WhatsApp Hotline | `7218700468` |
 | `ADMIN_EMAIL` | Official Studio Admin Login Email | `admin@artvibe.in` |
 | `ADMIN_PASSWORD` | Official Studio Admin Password | `Artvibe@2026` |

@@ -1,8 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI =
-  process.env.MONGODB_URI ||
-  'mongodb+srv://resin-art:resin-art07@cluster1.c2eapo6.mongodb.net/test?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI?.trim();
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -23,6 +21,15 @@ if (!global.mongooseCache) {
 export async function connectDB() {
   if (cached.conn && cached.conn.connection.readyState === 1) {
     return cached.conn;
+  }
+
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI is not configured. Set it in the server environment.');
+  }
+
+  if (cached.conn?.connection.readyState === 0) {
+    cached.conn = null;
+    cached.promise = null;
   }
 
   if (!cached.promise) {
@@ -73,8 +80,7 @@ export function getDbStatus() {
   return {
     type: 'MongoDB',
     connected,
-    uri: MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'),
-    host: connected ? mongoose.connection.host : 'cluster1.c2eapo6.mongodb.net',
-    name: connected ? mongoose.connection.name : 'resin',
+    host: connected ? mongoose.connection.host : 'not connected',
+    name: connected ? mongoose.connection.name : 'not connected',
   };
 }
