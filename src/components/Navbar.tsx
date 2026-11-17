@@ -43,12 +43,15 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileShopOpen, setMobileShopOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return false;
+  const [darkMode, setDarkMode] = useState(false);
+  const [themeReady, setThemeReady] = useState(false);
+
+  useEffect(() => {
     const saved = localStorage.getItem('artvibe_theme');
-    if (saved) return saved === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+    setDarkMode(saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setThemeReady(true);
+  }, []);
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -75,6 +78,8 @@ export default function Navbar() {
   }, [location]);
 
   useEffect(() => {
+    if (!themeReady) return;
+
     if (darkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
       document.documentElement.classList.add('dark');
@@ -84,7 +89,7 @@ export default function Navbar() {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('artvibe_theme', 'light');
     }
-  }, [darkMode]);
+  }, [darkMode, themeReady]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

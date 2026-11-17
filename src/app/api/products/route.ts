@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     else if (sort === 'newest') sortOption = { createdAt: -1 };
     else if (sort === 'featured') sortOption = { featured: -1, createdAt: -1 };
 
-    const mongoProducts = await ProductModel.find(query).sort(sortOption).lean();
+    const mongoProducts = await ProductModel.find(query).sort(sortOption).maxTimeMS(5000).lean();
 
     return NextResponse.json({
       success: true,
